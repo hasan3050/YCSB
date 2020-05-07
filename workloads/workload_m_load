@@ -1,5 +1,6 @@
 # recordcount is the number of lines that YCSB will read from the warm-up workload file
-recordcount=69897762
+recordcount=698977
+#69897762
 threadcount=36
 workload=site.ycsb.workloads.MemcachierWorkload
 # trace is the path to the trace file (should be in a ram disk)
