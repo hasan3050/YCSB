@@ -1,0 +1,11 @@
+# operationcount is the number of lines that YCSB will read from the workload file
+operationcount=6769148
+#676914873
+threadcount=36
+workload=site.ycsb.workloads.MemcachierWorkload
+# trace is the path to the trace file (should be in a ram disk)
+trace=/newdir/tmp/workload.out
+# acceleration defines how much do we want to accelerate the trace (should be an integer)
+acceleration=1
+# by default we ignore the DELETE operation, but we can enable it by having withdeletion=true
+withdeletion=false

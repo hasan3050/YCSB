@@ -47,6 +47,23 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
 
+import java.security.spec.KeySpec;
+import java.security.SecureRandom;
+import java.security.MessageDigest;  
+import java.security.NoSuchAlgorithmException;
+
+import java.util.Base64;
+import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.charset.StandardCharsets;
+
+import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
+
 /**
  * YCSB binding for <a href="http://redis.io/">Redis</a>.
  *
@@ -55,17 +72,53 @@ import java.util.Vector;
 public class RedisClient extends DB {
 
   private JedisCommands jedis;
+  private JedisCommands consumerJedis;
 
+  private static SecretKeySpec secretKey;
+  private static SecureRandom randomSecureRandom;
+  private static Cipher cipher;
+
+  private static byte[] key = new byte[16];
+  private static byte[] salt = new byte[16];
+  private static AtomicInteger counter = new AtomicInteger(0);
+  
   public static final String HOST_PROPERTY = "redis.host";
   public static final String PORT_PROPERTY = "redis.port";
   public static final String PASSWORD_PROPERTY = "redis.password";
   public static final String CLUSTER_PROPERTY = "redis.cluster";
 
+  public static final String CONSUMER_HOST_PROPERTY = "redis.consumer_host";
+  public static final String CONSUMER_PORT_PROPERTY = "redis.consumer_port";
+  public static final String CONSUMER_PASSWORD_PROPERTY = "redis.consumer_password";
+
   public static final String INDEX_KEY = "_indices";
+
+  public static String getNextKp() {
+    return Integer.toString(counter.getAndIncrement());
+  }
+
+  public void crypt_init() {
+    try {
+      randomSecureRandom = new SecureRandom();
+      randomSecureRandom.nextBytes(key);
+      randomSecureRandom.nextBytes(salt);
+
+      String keyString = new String(key);
+      SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+      KeySpec spec = new PBEKeySpec(keyString.toCharArray(), salt, 65536, 128);
+      SecretKey tmp = factory.generateSecret(spec);
+      secretKey = new SecretKeySpec(tmp.getEncoded(), "AES");
+
+      cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+    } catch(Exception e) {
+      System.out.println("Error while crypt init: " + e.toString());
+    }
+  }
 
   public void init() throws DBException {
     Properties props = getProperties();
     int port;
+    int consumerPort;
 
     String portString = props.getProperty(PORT_PROPERTY);
     if (portString != null) {
@@ -73,7 +126,16 @@ public class RedisClient extends DB {
     } else {
       port = Protocol.DEFAULT_PORT;
     }
+
+    String consumerPortString = props.getProperty(CONSUMER_PORT_PROPERTY);
+    if (consumerPortString != null) {
+      consumerPort = Integer.parseInt(consumerPortString);
+    } else {
+      consumerPort = Protocol.DEFAULT_PORT;
+    }
+
     String host = props.getProperty(HOST_PROPERTY);
+    String consumerHost = props.getProperty(CONSUMER_HOST_PROPERTY);
 
     boolean clusterEnabled = Boolean.parseBoolean(props.getProperty(CLUSTER_PROPERTY));
     if (clusterEnabled) {
@@ -85,10 +147,68 @@ public class RedisClient extends DB {
       ((Jedis) jedis).connect();
     }
 
+    consumerJedis = new Jedis(consumerHost, consumerPort);
+    ((Jedis) consumerJedis).connect();
+
     String password = props.getProperty(PASSWORD_PROPERTY);
     if (password != null) {
       ((BasicCommands) jedis).auth(password);
     }
+
+    String consumerPassword = props.getProperty(CONSUMER_PASSWORD_PROPERTY);
+    if (consumerPassword != null) {
+      ((BasicCommands) consumerJedis).auth(consumerPassword);
+    }
+
+    crypt_init();
+  }
+
+  public static byte[] getIV() {
+    byte[] iv = new byte[cipher.getBlockSize()];
+    randomSecureRandom.nextBytes(iv);
+    //System.out.println("IV: " + iv);
+    return iv;
+  }
+
+  public static byte[] getSHA(String input) {
+    try {
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
+      return md.digest(input.getBytes(StandardCharsets.UTF_8));
+    } catch (Exception e) {
+      System.out.println("Error while SHA: " + e.toString());
+    }
+    return null;
+  }
+
+  public static byte[] encrypt(String strToEncrypt) {
+    try{
+      byte[] iv = getIV();
+      IvParameterSpec ivspec = new IvParameterSpec(iv);
+      cipher.init(Cipher.ENCRYPT_MODE, secretKey, ivspec);
+      byte[] encryptBytes = cipher.doFinal(strToEncrypt.getBytes());
+      byte[] f = new byte[iv.length + encryptBytes.length];
+      System.arraycopy(iv, 0, f, 0, iv.length);
+      System.arraycopy(encryptBytes, 0, f, iv.length, encryptBytes.length);
+      //System.out.println("IV length: " + iv.length + ", encryption length: " + encryptBytes.length + ", total: "+ f.length);
+      return f;
+    } catch (Exception e) {
+        System.out.println("Error while encrypting: " + e.toString());
+    }
+    return null;
+  }
+
+  public static String decrypt(byte[] toDecrypt) {
+    try{
+      byte[] iv = Arrays.copyOfRange(toDecrypt, 0, cipher.getBlockSize());
+      IvParameterSpec ivspec = new IvParameterSpec(iv);
+      byte[] textToDecipherWithoutIv = Arrays.copyOfRange(toDecrypt, cipher.getBlockSize(), toDecrypt.length);
+      //System.out.println("IV length: " + iv.length + ", deryption length: " + textToDecipherWithoutIv.length + ", total: "+ toDecrypt.length);
+      cipher.init(Cipher.DECRYPT_MODE, secretKey, ivspec);
+      return new String(cipher.doFinal(textToDecipherWithoutIv));
+    } catch (Exception e) {
+        System.out.println("Error while decrypting: " + e.toString());
+    }
+    return null;
   }
 
   public void cleanup() throws DBException {
@@ -112,11 +232,14 @@ public class RedisClient extends DB {
   // XXX jedis.select(int index) to switch to `table`
 
   public String cacheGet(String key) {
-    return jedis.get(key);
+    String kp = consumerJedis.get(key);
+    return jedis.get(kp);
   }
 
   public Status cacheSet(String key, String value) {
-    return jedis.set(key, value).equals("OK") ? Status.OK : Status.ERROR;
+    String kp = getNextKp();
+    consumerJedis.set(key, kp);
+    return jedis.set(kp, value).equals("OK") ? Status.OK : Status.ERROR;
   }
 
   public Status cacheDelete(String key) {

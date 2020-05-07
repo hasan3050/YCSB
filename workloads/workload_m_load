@@ -1,0 +1,10 @@
+# recordcount is the number of lines that YCSB will read from the warm-up workload file
+recordcount=69897762
+threadcount=36
+workload=site.ycsb.workloads.MemcachierWorkload
+# trace is the path to the trace file (should be in a ram disk)
+trace=/newdir/tmp/warm_up.out
+# for warm-up workload, we have acceleration=0 with which an upcoming operation does not need to wait until its given arrival time
+acceleration=0
+# by default we ignore the DELETE operation, but we can enable it by having withdeletion=true
+withdeletion=false
