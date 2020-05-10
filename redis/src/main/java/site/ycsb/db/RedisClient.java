@@ -76,10 +76,9 @@ public class RedisClient extends DB {
 
   private static SecretKeySpec secretKey;
   private static SecureRandom randomSecureRandom;
-//  private static Cipher cipher;
 
-  private static byte[] key = new byte[16];
-  private static byte[] salt = new byte[16];
+  private static byte[] _key = new byte[16];
+  private static byte[] _salt = new byte[16];
   private static AtomicInteger counter = new AtomicInteger(0);
   
   public static final String HOST_PROPERTY = "redis.host";
@@ -100,16 +99,15 @@ public class RedisClient extends DB {
   public void crypt_init() {
     try {
       randomSecureRandom = new SecureRandom();
-      randomSecureRandom.nextBytes(key);
-      randomSecureRandom.nextBytes(salt);
+      randomSecureRandom.nextBytes(_key);
+      randomSecureRandom.nextBytes(_salt);
 
-      String keyString = new String(key);
+      String keyString = new String(_key);
       SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-      KeySpec spec = new PBEKeySpec(keyString.toCharArray(), salt, 65536, 128);
+      KeySpec spec = new PBEKeySpec(keyString.toCharArray(), _salt, 65536, 128);
       SecretKey tmp = factory.generateSecret(spec);
       secretKey = new SecretKeySpec(tmp.getEncoded(), "AES");
 
-//      cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
     } catch(Exception e) {
       System.out.println("Error while crypt init: " + e.toString());
     }
@@ -191,20 +189,24 @@ public class RedisClient extends DB {
       System.arraycopy(iv, 0, f, 0, iv.length);
       System.arraycopy(encryptBytes, 0, f, iv.length, encryptBytes.length);
       //System.out.println("IV length: " + iv.length + ", encryption length: " + encryptBytes.length + ", total: "+ f.length);
-      return new String(f);
+
+      return Base64.getEncoder().encodeToString(f);
     } catch (Exception e) {
         System.out.println("Error while encrypting: " + e.toString());
     }
     return null;
   }
 
-  public static String decrypt(String toDecrypt) {
+  public static String decrypt(String strToDecrypt) {
     try{
       Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-      byte[] iv = Arrays.copyOfRange(toDecrypt.getBytes(), 0, cipher.getBlockSize());
+      byte[] toDecryptByte = Base64.getDecoder().decode(strToDecrypt);
+      
+      byte[] iv = Arrays.copyOfRange(toDecryptByte, 0, cipher.getBlockSize());
       IvParameterSpec ivspec = new IvParameterSpec(iv);
-      byte[] textToDecipherWithoutIv = Arrays.copyOfRange(toDecrypt.getBytes(), cipher.getBlockSize(), toDecrypt.getBytes().length);
-      //System.out.println("IV length: " + iv.length + ", deryption length: " + textToDecipherWithoutIv.length + ", total: "+ toDecrypt.length);
+      byte[] textToDecipherWithoutIv = Arrays.copyOfRange(toDecryptByte, cipher.getBlockSize(), toDecryptByte.length);
+
+      //System.out.println("IV length: " + iv.length + ", deryption length: " + textToDecipherWithoutIv.length + ", total: "+ toDecryptByte.length);
       cipher.init(Cipher.DECRYPT_MODE, secretKey, ivspec);
       return new String(cipher.doFinal(textToDecipherWithoutIv));
     } catch (Exception e) {
@@ -253,10 +255,10 @@ public class RedisClient extends DB {
   public Status cacheSet(String key, String value) {
     String kp = getNextKp();
     String vp = encrypt(value);
-//    String hash = new String(getSHA(vp));
+    String hash = new String(getSHA(vp));
 
     consumerJedis.lpush(key, kp);
-//    consumerJedis.lpush(key, hash);
+    consumerJedis.lpush(key, hash);
     
     return jedis.set(kp, vp).equals("OK") ? Status.OK : Status.ERROR;
   }
