@@ -1,5 +1,5 @@
 # recordcount is the number of lines that YCSB will read from the warm-up workload file
-recordcount=698977
+recordcount=6989776
 #69897762
 threadcount=36
 workload=site.ycsb.workloads.MemcachierWorkload

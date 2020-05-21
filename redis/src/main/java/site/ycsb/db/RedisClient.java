@@ -79,6 +79,7 @@ public class RedisClient extends DB {
 
   private static byte[] _key = new byte[16];
   private static byte[] _salt = new byte[16];
+  private static int remote_ratio = 2;
   private static AtomicInteger counter = new AtomicInteger(0);
   
   public static final String HOST_PROPERTY = "redis.host";
@@ -89,11 +90,20 @@ public class RedisClient extends DB {
   public static final String CONSUMER_HOST_PROPERTY = "redis.consumer_host";
   public static final String CONSUMER_PORT_PROPERTY = "redis.consumer_port";
   public static final String CONSUMER_PASSWORD_PROPERTY = "redis.consumer_password";
+  public static final String REMOTE_RATIO_PROPERTY = "redis.remote_ratio";
 
   public static final String INDEX_KEY = "_indices";
 
   public static String getNextKp() {
     return Integer.toString(counter.getAndIncrement());
+  }
+
+  public static Boolean is_remote(String kp) {
+    int number = Integer.parseInt(kp);
+    if (number % 10 < remote_ratio) {
+      return true;
+    }
+    return false;
   }
 
   public void crypt_init() {
@@ -158,6 +168,10 @@ public class RedisClient extends DB {
       ((BasicCommands) consumerJedis).auth(consumerPassword);
     }
 
+    String remoteRatio = props.getProperty(REMOTE_RATIO_PROPERTY);
+    if (remoteRatio != null) {
+      remote_ratio = Integer.parseInt(remoteRatio);
+    }
     crypt_init();
   }
 
@@ -237,23 +251,55 @@ public class RedisClient extends DB {
 
   public String cacheGet(String key) {
     List<String> mc = consumerJedis.lrange(key, 0, -1);
-    String kp = mc.get(1);
-    String hash = mc.get(0);
+
+    String kp, hash;
+
+    hash = mc.get(0); // this is in the remote redis
+    kp = mc.get(1);
+
+    if(is_remote(kp) == false) {
+      return hash;
+    }
 
     String vp = jedis.get(kp);
+    if(vp == null) {
+      try {
+        Thread.sleep(3);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+      }
+      return null;
+    }
     String vHash = new String(getSHA(vp));
     
     if(vHash.equals(hash)) {
       return decrypt(vp);
     }
     else {
-      System.out.println("hash mis match for key " + kp);
+      System.out.println("hash mismatch for key " + kp);
     }
     return null;
   }
 
   public Status cacheSet(String key, String value) {
     String kp = getNextKp();
+
+    if(is_remote(kp) == false) {
+        consumerJedis.lpush(key, kp);
+        consumerJedis.lpush(key, value);
+        return Status.OK;
+    }
+/*    else { //to simulate the disk
+      try {
+          Thread.sleep(5);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+      }
+      consumerJedis.lpush(key, kp);
+      consumerJedis.lpush(key, value);
+      return Status.OK;
+    }
+*/
     String vp = encrypt(value);
     String hash = new String(getSHA(vp));
 
@@ -261,6 +307,8 @@ public class RedisClient extends DB {
     consumerJedis.lpush(key, hash);
     
     return jedis.set(kp, vp).equals("OK") ? Status.OK : Status.ERROR;
+
+//return consumerJedis.set(key, value).equals("OK") ? Status.OK : Status.ERROR;
   }
 
   public Status cacheDelete(String key) {
