@@ -24,6 +24,8 @@ import site.ycsb.measurements.Measurements;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
+import java.nio.ByteBuffer;
 
 /**
  * The core benchmark scenario. Represents a set of clients doing simple CRUD operations. The
@@ -706,8 +708,8 @@ public class CoreWorkload extends Workload {
     // choose a random key
     long keynum = nextKeynum();
 
-    String keyname = buildKeyName(keynum);
-
+    String keyname = String.valueOf(keynum);//buildKeyName(keynum);
+/*
     HashSet<String> fields = null;
 
     if (!readallfields) {
@@ -726,7 +728,8 @@ public class CoreWorkload extends Workload {
 
     if (dataintegrity) {
       verifyRow(keyname, cells);
-    }
+    }*/
+	db.cacheGet(keyname);
   }
 
   public void doTransactionReadModifyWrite(DB db) {
@@ -822,10 +825,17 @@ public class CoreWorkload extends Workload {
     long keynum = transactioninsertkeysequence.nextValue();
 
     try {
-      String dbkey = buildKeyName(keynum);
+      String dbkey = String.valueOf(keynum);//buildKeyName(keynum);
 
-      HashMap<String, ByteIterator> values = buildValues(dbkey);
-      db.insert(table, dbkey, values);
+//      HashMap<String, ByteIterator> values = buildValues(dbkey);
+//      db.insert(table, dbkey, values);
+	int size = (int)fieldlengthgenerator.nextValue().longValue();
+	byte[] value = ByteBuffer.allocate(size).array();
+	for (int i = 0; i < size; ++i) {
+       		value[i] = (byte)((int)(ThreadLocalRandom.current().nextFloat() * 91) + ' ');
+      	}
+	String valueString = new String(value);
+      	db.cacheSet(dbkey, valueString);
     } finally {
       transactioninsertkeysequence.acknowledge(keynum);
     }

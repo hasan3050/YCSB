@@ -127,7 +127,7 @@ public class RedisClient extends DB {
 
   public static void diskWrite(){
     try {
-      RandomAccessFile file = new RandomAccessFile("./random_file.txt", "rw");//Open our file with read/write access
+      RandomAccessFile file = new RandomAccessFile("/newdir/random_file.txt", "rw");//Open our file with read/write access
       byte[] b = new byte[204857];
       new Random().nextBytes(b);
       file.write(b);
@@ -139,7 +139,7 @@ public class RedisClient extends DB {
 
   public static void diskRead(){
     try {
-      RandomAccessFile file = new RandomAccessFile("./random_file.txt", "rw");//Open our file with read/write access
+      RandomAccessFile file = new RandomAccessFile("/newdir/random_file.txt", "rw");//Open our file with read/write access
       byte[] b = new byte[8285760];
       file.read(b, 0, 8285760);
       file.close();//Close our filestream.
@@ -288,7 +288,7 @@ public class RedisClient extends DB {
     String vp = jedis.get(kp);
     if(vp == null) { // to simulate disk read
       diskWrite();
-      return null;
+      return hash; //dummy data for not being counted as an error
     }
     String vHash = new String(getSHA(vp));
     
@@ -298,16 +298,16 @@ public class RedisClient extends DB {
     else {
       System.out.println("hash mismatch for key " + kp);
     }
-    return null;
+    return vp;
   }
 
   public Status cacheSet(String key, String value) {
+    System.out.println("key: "+ key+ " "+ is_remote(key));
     if(is_remote(key) == false) {
         consumerJedis.set(key, value);
         return Status.OK;
     }
-/*
-    else { //to simulate the disk
+/*    else { //to simulate the disk
       diskRead();
       return Status.OK;
     }

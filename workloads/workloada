@@ -14,3 +14,5 @@ insertproportion=0
 
 requestdistribution=zipfian
 zipfian.constant=0.5
+acceleration=10
+#threadcount=16
