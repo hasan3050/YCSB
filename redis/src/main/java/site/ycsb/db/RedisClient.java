@@ -249,7 +249,7 @@ public class RedisClient extends DB {
       cipher.init(Cipher.DECRYPT_MODE, secretKey, ivspec);
       return new String(cipher.doFinal(textToDecipherWithoutIv));
     } catch (Exception e) {
-        System.out.println("Error while decrypting: " + e.toString());
+    //    System.out.println("Error while decrypting: " + e.toString());
     }
     return null;
   }
@@ -296,13 +296,13 @@ public class RedisClient extends DB {
       return decrypt(vp);
     }
     else {
-      System.out.println("hash mismatch for key " + kp);
+    //  System.out.println("hash mismatch for key " + kp);
     }
     return vp;
   }
 
   public Status cacheSet(String key, String value) {
-    System.out.println("key: "+ key+ " "+ is_remote(key));
+//    System.out.println("key: "+ key+ " "+ is_remote(key));
     if(is_remote(key) == false) {
         consumerJedis.set(key, value);
         return Status.OK;

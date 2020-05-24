@@ -597,8 +597,16 @@ public class CoreWorkload extends Workload {
   @Override
   public boolean doInsert(DB db, Object threadstate) {
     int keynum = keysequence.nextValue().intValue();
-    String dbkey = buildKeyName(keynum);
-    HashMap<String, ByteIterator> values = buildValues(dbkey);
+    String dbkey = String.valueOf(keynum); //buildKeyName(keynum);
+        int size = (int)fieldlengthgenerator.nextValue().longValue();
+        byte[] value = ByteBuffer.allocate(size).array();
+        for (int i = 0; i < size; ++i) {
+                value[i] = (byte)((int)(ThreadLocalRandom.current().nextFloat() * 91) + ' ');
+        }
+        String valueString = new String(value);
+        Status status = db.cacheSet(dbkey, valueString);
+
+/*    HashMap<String, ByteIterator> values = buildValues(dbkey);
 
     Status status;
     int numOfRetries = 0;
@@ -627,7 +635,7 @@ public class CoreWorkload extends Workload {
 
       }
     } while (true);
-
+*/
     return null != status && status.isOk();
   }
 
