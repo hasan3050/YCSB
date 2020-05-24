@@ -9,7 +9,7 @@ output*
 .classpath
 .settings
 .checkstyle
-
+screenlog*
 # ignore standard IntelliJ files
 .idea/
 *.iml

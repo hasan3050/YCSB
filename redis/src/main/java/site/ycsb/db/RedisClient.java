@@ -51,6 +51,8 @@ import java.security.spec.KeySpec;
 import java.security.SecureRandom;
 import java.security.MessageDigest;  
 import java.security.NoSuchAlgorithmException;
+import java.io.RandomAccessFile;
+import java.util.Random;
 
 import java.util.Base64;
 import java.util.Arrays;
@@ -120,6 +122,29 @@ public class RedisClient extends DB {
 
     } catch(Exception e) {
       System.out.println("Error while crypt init: " + e.toString());
+    }
+  }
+
+  public static void diskWrite(){
+    try {
+      RandomAccessFile file = new RandomAccessFile("./random_file.txt", "rw");//Open our file with read/write access
+      byte[] b = new byte[204857];
+      new Random().nextBytes(b);
+      file.write(b);
+      file.close();//Close our filestream.
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  public static void diskRead(){
+    try {
+      RandomAccessFile file = new RandomAccessFile("./random_file.txt", "rw");//Open our file with read/write access
+      byte[] b = new byte[8285760];
+      file.read(b, 0, 8285760);
+      file.close();//Close our filestream.
+    } catch (Exception e) {
+      e.printStackTrace();
     }
   }
 
@@ -250,24 +275,19 @@ public class RedisClient extends DB {
   // XXX jedis.select(int index) to switch to `table`
 
   public String cacheGet(String key) {
-    List<String> mc = consumerJedis.lrange(key, 0, -1);
+    if(is_remote(key) == false) {
+      return consumerJedis.get(key);
+    }
 
+    List<String> mc = consumerJedis.lrange(key, 0, -1);
     String kp, hash;
 
     hash = mc.get(0); // this is in the remote redis
     kp = mc.get(1);
 
-    if(is_remote(kp) == false) {
-      return hash;
-    }
-
     String vp = jedis.get(kp);
-    if(vp == null) {
-      try {
-        Thread.sleep(3);
-      } catch (InterruptedException ie) {
-        Thread.currentThread().interrupt();
-      }
+    if(vp == null) { // to simulate disk read
+      diskWrite();
       return null;
     }
     String vHash = new String(getSHA(vp));
@@ -282,24 +302,17 @@ public class RedisClient extends DB {
   }
 
   public Status cacheSet(String key, String value) {
-    String kp = getNextKp();
-
-    if(is_remote(kp) == false) {
-        consumerJedis.lpush(key, kp);
-        consumerJedis.lpush(key, value);
+    if(is_remote(key) == false) {
+        consumerJedis.set(key, value);
         return Status.OK;
     }
-/*    else { //to simulate the disk
-      try {
-          Thread.sleep(5);
-      } catch (InterruptedException ie) {
-        Thread.currentThread().interrupt();
-      }
-      consumerJedis.lpush(key, kp);
-      consumerJedis.lpush(key, value);
+/*
+    else { //to simulate the disk
+      diskRead();
       return Status.OK;
     }
 */
+    String kp = getNextKp();
     String vp = encrypt(value);
     String hash = new String(getSHA(vp));
 
