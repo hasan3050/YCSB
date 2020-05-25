@@ -282,6 +282,8 @@ public class RedisClient extends DB {
     List<String> mc = consumerJedis.lrange(key, 0, -1);
     String kp, hash;
 
+    if(mc.size() <= 0)
+        return null;
     hash = mc.get(0); // this is in the remote redis
     kp = mc.get(1);
 
@@ -293,11 +295,12 @@ public class RedisClient extends DB {
     String vHash = new String(getSHA(vp));
     
     if(vHash.equals(hash)) {
-      return decrypt(vp);
+      //return decrypt(vp);
     }
     else {
     //  System.out.println("hash mismatch for key " + kp);
     }
+    encrypt(vp);
     return vp;
   }
 
@@ -318,8 +321,9 @@ public class RedisClient extends DB {
 
     consumerJedis.lpush(key, kp);
     consumerJedis.lpush(key, hash);
-    
-    return jedis.set(kp, vp).equals("OK") ? Status.OK : Status.ERROR;
+
+    return jedis.set(kp, value).equals("OK") ? Status.OK : Status.ERROR;  
+//    return jedis.set(kp, vp).equals("OK") ? Status.OK : Status.ERROR;
 
 //return consumerJedis.set(key, value).equals("OK") ? Status.OK : Status.ERROR;
   }
